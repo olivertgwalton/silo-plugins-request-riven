@@ -1,0 +1,63 @@
+{
+  "plugins": [
+    {
+      "manifest": {
+        "plugin_id": "silo.requests.riven",
+        "version": "0.1.0",
+        "checksum": "__CHECKSUM__",
+        "silo_api_version": "v1",
+        "presentation": {
+          "display_name": "Riven Requests",
+          "summary": "Submit Silo movie and series requests directly to a riven-rs instance.",
+          "description_markdown": "Connects Silo to [riven-rs](https://github.com/rivenmedia/riven-rs) using its native GraphQL request API (`requestMovie` / `requestShow`), so requests can be fulfilled without routing through Seerr. Riven tracks and scrapes the request itself; the plugin only submits it and reports back status derived from the resulting media item's state.",
+          "setup_markdown": "Install the plugin and add a Riven connection in Silo with the riven-rs API base URL (e.g. `http://localhost:8080`) and the value of `RIVEN_SETTING__API_KEY` configured on that instance. Requests are submitted under a trusted service identity; riven has no per-user approval queue, so every request is accepted immediately and left for riven's own indexing/scraping pipeline to fulfill.",
+          "homepage_url": "https://github.com/rivenmedia/riven-rs",
+          "source_url": "https://github.com/olivertgwalton/silo-plugins-request-riven",
+          "support_url": "https://github.com/olivertgwalton/silo-plugins-request-riven/issues",
+          "changelog_url": "https://github.com/olivertgwalton/silo-plugins-request-riven/releases",
+          "publisher_name": "olivertgwalton",
+          "publisher_url": "https://github.com/olivertgwalton",
+          "license_spdx": "AGPL-3.0-only"
+        },
+        "supported_platforms": [
+          { "os": "linux", "arch": "amd64" },
+          { "os": "linux", "arch": "arm64" },
+          { "os": "darwin", "arch": "arm64" }
+        ],
+        "global_config_schema": [],
+        "capabilities": [
+          {
+            "type": "request_router.v1",
+            "id": "riven",
+            "display_name": "Riven",
+            "description": "Fulfill content requests directly against a riven-rs instance's GraphQL API.",
+            "config_schema": [
+              {
+                "key": "connection",
+                "title": "Riven",
+                "json_schema": "{\"type\":\"object\",\"properties\":{}}",
+                "admin_form": {
+                  "submit_label": "Save connection",
+                  "fields": []
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "repo_url": "https://github.com/olivertgwalton/silo-plugins-request-riven",
+      "checksums_url": "https://github.com/olivertgwalton/silo-plugins-request-riven/releases/latest/download/checksums.txt",
+      "binaries": {
+        "linux/amd64": {
+          "url": "https://github.com/olivertgwalton/silo-plugins-request-riven/releases/latest/download/plugin-linux-amd64"
+        },
+        "linux/arm64": {
+          "url": "https://github.com/olivertgwalton/silo-plugins-request-riven/releases/latest/download/plugin-linux-arm64"
+        },
+        "darwin/arm64": {
+          "url": "https://github.com/olivertgwalton/silo-plugins-request-riven/releases/latest/download/plugin-darwin-arm64"
+        }
+      }
+    }
+  ]
+}
