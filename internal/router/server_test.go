@@ -95,6 +95,47 @@ func TestFulfillSeriesUsesTVDB(t *testing.T) {
 	}
 }
 
+// TestFulfillMultipleQualitiesShareOneRequest locks in the fix for a bug where
+// only the first requested quality got a target: the host requires one target
+// per requested quality, and a tier with none comes back gets marked failed
+// even though riven (which has no per-quality profiles) is handling it fine.
+func TestFulfillMultipleQualitiesShareOneRequest(t *testing.T) {
+	f := &fakeRiven{byQuerySubstring: map[string]string{
+		"requestMovie": `{"data":{"requestMovie":{"success":true,"message":"Movie request created successfully.","item":{"state":"REQUESTED"}}}}`,
+	}}
+	srv := httptest.NewServer(f.handler(t))
+	t.Cleanup(srv.Close)
+
+	resp, err := New().Fulfill(context.Background(), &pluginv1.FulfillRequest{
+		Request:     &pluginv1.RequestDescriptor{MediaType: "movie", Title: "Arrival", ExternalIds: map[string]string{"tmdb": "42"}},
+		Qualities:   []*pluginv1.RequestedQuality{{Id: "1080p"}, {Id: "2160p", Is4K: true}},
+		Connections: []*pluginv1.RouterConnection{routerConn("c1", srv.URL)},
+	})
+	if err != nil {
+		t.Fatalf("Fulfill: %v", err)
+	}
+	if len(resp.GetTargets()) != 2 {
+		t.Fatalf("want 2 targets (one per quality), got %d msg=%q", len(resp.GetTargets()), resp.GetMessage())
+	}
+	byQuality := map[string]*pluginv1.FulfillmentTarget{}
+	for _, tgt := range resp.GetTargets() {
+		byQuality[tgt.GetQuality()] = tgt
+	}
+	for _, q := range []string{"1080p", "2160p"} {
+		tgt, ok := byQuality[q]
+		if !ok {
+			t.Fatalf("missing target for quality %q", q)
+		}
+		if tgt.GetStatus() != "queued" || tgt.GetExternalId() != "42" || tgt.GetExternalStatus() != "REQUESTED" {
+			t.Fatalf("bad %s target: %+v", q, tgt)
+		}
+	}
+	// Riven has no per-quality profiles: only one request should have been sent.
+	if f.calls != 1 {
+		t.Fatalf("want 1 riven call for 2 qualities on the same connection, got %d", f.calls)
+	}
+}
+
 func TestFulfillNoUsableIDShortCircuits(t *testing.T) {
 	// No server is started: a call would fail the test via connection refused,
 	// proving Fulfill returns before dialing out when it has no id to send.

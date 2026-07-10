@@ -29,9 +29,12 @@ key or unreachable host.
   this). Media is identified by **TMDB id** (movies) or **TVDB id** (series),
   falling back to **IMDB id** for either.
 - Riven has no per-quality profile distinction — its own scraper/ranking
-  picks the best available release — so every requested quality tier from
-  Silo maps onto the same single riven request. The first quality's id is
-  echoed back on the `FulfillmentTarget` purely so Silo can still track it.
+  config picks the best available release — so the request is submitted to
+  riven exactly once per connection regardless of how many quality tiers
+  Silo asks for. Silo requires one `FulfillmentTarget` per requested quality
+  (a tier with no matching target gets marked failed), so that single
+  outcome is echoed back once per tier, all sharing the same external id
+  and status.
 - A duplicate request (riven returns `success: false` with no `item`) is
   treated as already-queued.
 - `requested_by` is set to the literal string `"silo"`, matching riven's own

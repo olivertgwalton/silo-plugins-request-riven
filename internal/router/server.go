@@ -73,11 +73,13 @@ func imdbAndOther(idKind, id string) (imdbID, other *string) {
 }
 
 // Fulfill submits exactly one riven item request per connection: riven has no
-// per-quality profile distinction (its own scraper/ranking picks the best
-// available release), so every requested quality tier maps onto the same
-// underlying request. The first quality's id is echoed back so the host can
-// still track the target; per-target containment still applies across
-// connections (one failing connection never aborts the others).
+// per-quality profile distinction — its own scraper/ranking config picks the
+// best available release — so the request is submitted once and the same
+// outcome is echoed back as a target for every quality tier the host asked
+// for. The host requires one target per requested quality; without this, a
+// quality tier with no matching target gets marked failed even though riven
+// is handling it. Per-target containment still applies across connections
+// (one failing connection never aborts the others).
 func (s *Server) Fulfill(ctx context.Context, req *pluginv1.FulfillRequest) (*pluginv1.FulfillResponse, error) {
 	d := req.GetRequest()
 	isSeries := d.GetMediaType() == "series"
@@ -89,16 +91,26 @@ func (s *Server) Fulfill(ctx context.Context, req *pluginv1.FulfillRequest) (*pl
 	}
 	imdbID, other := imdbAndOther(idKind, id)
 
-	quality := "any"
-	if qs := req.GetQualities(); len(qs) > 0 {
-		quality = qs[0].GetId()
+	qualities := req.GetQualities()
+	if len(qualities) == 0 {
+		qualities = []*pluginv1.RequestedQuality{{Id: "any"}}
 	}
 
 	var targets []*pluginv1.FulfillmentTarget
 	for _, c := range req.GetConnections() {
 		conn := connectionFromRouter(c)
 		client := httpclient.New(conn.BaseURL, conn.APIKey, nil)
-		targets = append(targets, s.fulfillOne(ctx, client, conn.ID, quality, id, isSeries, d.GetTitle(), imdbID, other))
+		status, externalStatus, message := s.submitOne(ctx, client, isSeries, d.GetTitle(), imdbID, other)
+		for _, q := range qualities {
+			targets = append(targets, &pluginv1.FulfillmentTarget{
+				Quality:        q.GetId(),
+				ConnectionId:   conn.ID,
+				ExternalId:     id,
+				ExternalStatus: externalStatus,
+				Status:         status,
+				Message:        message,
+			})
+		}
 	}
 	if len(targets) == 0 {
 		return &pluginv1.FulfillResponse{Message: "no riven connection configured"}, nil
@@ -106,10 +118,9 @@ func (s *Server) Fulfill(ctx context.Context, req *pluginv1.FulfillRequest) (*pl
 	return &pluginv1.FulfillResponse{Targets: targets}, nil
 }
 
-// fulfillOne submits a single connection's request.
-func (s *Server) fulfillOne(ctx context.Context, client *httpclient.Client, connID, quality, extID string, isSeries bool, title string, imdbID, other *string) *pluginv1.FulfillmentTarget {
-	t := &pluginv1.FulfillmentTarget{Quality: quality, ConnectionId: connID, ExternalId: extID}
-
+// submitOne submits a single connection's request once; its outcome is
+// reused for every quality tier's target (see Fulfill).
+func (s *Server) submitOne(ctx context.Context, client *httpclient.Client, isSeries bool, title string, imdbID, other *string) (status, externalStatus, message string) {
 	var outcome riven.RequestOutcome
 	var err error
 	if isSeries {
@@ -120,17 +131,12 @@ func (s *Server) fulfillOne(ctx context.Context, client *httpclient.Client, conn
 
 	switch {
 	case err != nil:
-		t.Status = "failed"
-		t.Message = err.Error()
+		return "failed", "", err.Error()
 	case outcome.Conflict:
-		t.Status = "queued"
-		t.Message = "already requested in riven"
+		return "queued", "", "already requested in riven"
 	default:
-		t.Status = "queued"
-		t.Message = outcome.Message
-		t.ExternalStatus = outcome.State
+		return "queued", outcome.State, outcome.Message
 	}
-	return t
 }
 
 // CheckStatus re-derives the request's external id from the descriptor (the
