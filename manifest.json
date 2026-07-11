@@ -48,6 +48,23 @@
           }
         }
       ]
+    },
+    {
+      "type": "scan_source.v1",
+      "id": "riven",
+      "display_name": "Riven",
+      "description": "Detect movies and episodes riven-rs has finished downloading and scan them into the library.",
+      "config_schema": [
+        {
+          "key": "connection",
+          "title": "Riven",
+          "json_schema": "{\"type\":\"object\",\"properties\":{}}",
+          "admin_form": {
+            "submit_label": "Save connection",
+            "fields": []
+          }
+        }
+      ]
     }
   ]
 }
