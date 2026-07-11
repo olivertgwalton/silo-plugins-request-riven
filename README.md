@@ -1,10 +1,17 @@
 # Silo Requests: Riven
 
-A Silo `request_router.v1` plugin that fulfills content requests directly
-against a [riven-rs](https://github.com/rivenmedia/riven-rs) instance's native
-GraphQL request API (`requestMovie` / `requestShow`). Unlike the
-[Seerr plugin](https://github.com/Silo-Community/silo-plugins-requests-seerr),
-no Seerr instance is involved: riven tracks and scrapes the request itself.
+A Silo plugin that connects to a [riven-rs](https://github.com/rivenmedia/riven-rs)
+instance's GraphQL API for two capabilities:
+
+- **`request_router.v1`**: fulfills content requests directly against riven's
+  native request API (`requestMovie` / `requestShow`). Unlike the
+  [Seerr plugin](https://github.com/Silo-Community/silo-plugins-requests-seerr),
+  no Seerr instance is involved: riven tracks and scrapes the request itself.
+- **`scan_source.v1`**: detects movies and episodes riven-rs has finished
+  downloading and reports their filesystem paths so Silo's autoscan engine
+  scans them into the library. See [Scan source](#scan-source) below.
+
+Both capabilities can be bound to the same Riven connection.
 
 ## Connection config
 
@@ -45,6 +52,28 @@ key or unreachable host.
   machine (`Indexed`, `Unreleased`, `Scraped`, `Ongoing`,
   `PartiallyCompleted`, `Completed`, `Paused`, `Failed`) onto Silo's
   normalized `queued` / `downloading` / `completed` / `failed`.
+
+## Scan source
+
+Install the plugin, then from Silo's Plugins page install this scan source,
+bind it to the same Riven connection used for requests, and set a poll
+interval (the default applies if left unset).
+
+On each poll, the plugin asks riven for every `Movie` and `Episode` currently
+in the `Completed` state, diffs that against the set of ids it has already
+reported (the host-owned opaque marker), and returns the filesystem path of
+each newly-completed item as a `file`-scoped change. Silo applies the
+source's configured path rewrites (translating riven's VFS path, e.g.
+`/mount/...`, to wherever Silo's library actually sees that path) and
+enqueues a scan.
+
+A source's first poll never replays riven's existing library: it seeds the
+marker with every already-completed item and reports no changes, matching
+the host's "start from now" contract for a freshly bound source.
+
+**Known limitation:** deletions are not detected. If riven removes a
+completed item's files, this source will not notice; run a manual or
+scheduled library scan to reconcile removals.
 
 ## Build / test
 
