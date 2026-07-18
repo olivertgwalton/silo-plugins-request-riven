@@ -148,58 +148,6 @@ func setIfNotNil(m map[string]any, key string, v *string) {
 	}
 }
 
-type mediaItemID struct {
-	ID int64 `json:"id"`
-}
-
-const itemsByStateQuery = `
-query($state: MediaItemState!, $itemType: MediaItemType!) {
-  itemsByState(state: $state, itemType: $itemType) { id }
-}`
-
-// CompletedItemIDs returns the ids of every riven media item of the given
-// itemType ("MOVIE" or "EPISODE") currently in the Completed state.
-func CompletedItemIDs(ctx context.Context, client *httpclient.Client, itemType string) ([]int64, error) {
-	type data struct {
-		ItemsByState []mediaItemID `json:"itemsByState"`
-	}
-	result, err := do[data](ctx, client, itemsByStateQuery, map[string]any{"state": "Completed", "itemType": itemType})
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int64, len(result.ItemsByState))
-	for i, item := range result.ItemsByState {
-		ids[i] = item.ID
-	}
-	return ids, nil
-}
-
-type filesystemEntry struct {
-	Path string `json:"path"`
-}
-
-const filesystemEntriesQuery = `
-query($id: Int!) {
-  filesystemEntries(mediaItemId: $id) { path }
-}`
-
-// FilesystemPaths returns every filesystem path riven has recorded for a
-// media item (normally one; a multi-part release could have more than one).
-func FilesystemPaths(ctx context.Context, client *httpclient.Client, mediaItemID int64) ([]string, error) {
-	type data struct {
-		FilesystemEntries []filesystemEntry `json:"filesystemEntries"`
-	}
-	result, err := do[data](ctx, client, filesystemEntriesQuery, map[string]any{"id": mediaItemID})
-	if err != nil {
-		return nil, err
-	}
-	paths := make([]string, len(result.FilesystemEntries))
-	for i, e := range result.FilesystemEntries {
-		paths[i] = e.Path
-	}
-	return paths, nil
-}
-
 type mediaItemState struct {
 	State *string `json:"state"`
 }

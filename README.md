@@ -7,9 +7,10 @@ instance's GraphQL API for two capabilities:
   native request API (`requestMovie` / `requestShow`). Unlike the
   [Seerr plugin](https://github.com/Silo-Community/silo-plugins-requests-seerr),
   no Seerr instance is involved: riven tracks and scrapes the request itself.
-- **`scan_source.v1`**: detects movies and episodes riven-rs has finished
-  downloading and reports their filesystem paths so Silo's autoscan engine
-  scans them into the library. See [Scan source](#scan-source) below.
+- **`scan_source.v1`** (+ **`http_routes.v1`**): receives riven's outbound
+  webhook when a download finishes and reports the file paths it carries so
+  Silo's autoscan engine scans them into the library — no polling of riven's
+  DB/GraphQL. See [Scan source](#scan-source) below.
 
 Both capabilities can be bound to the same Riven connection.
 
@@ -55,25 +56,57 @@ key or unreachable host.
 
 ## Scan source
 
-Install the plugin, then from Silo's Plugins page install this scan source,
-bind it to the same Riven connection used for requests, and set a poll
-interval (the default applies if left unset).
+Instead of polling riven's DB/GraphQL, the plugin is driven by riven's own
+outbound webhook (the riven-rs `webhooks` plugin). It registers an HTTP route —
+`POST /webhook` — that the host exposes; point riven's webhook URL setting at
+that route's public URL. On every notable state change riven POSTs a signed
+JSON envelope; on `riven.media-item.download.success` the envelope carries the
+VFS paths of the files the download made available, under
+`data.filesystem_paths`. The plugin ignores every other event and buffers those
+paths.
 
-On each poll, the plugin asks riven for every `Movie` and `Episode` currently
-in the `Completed` state, diffs that against the set of ids it has already
-reported (the host-owned opaque marker), and returns the filesystem path of
-each newly-completed item as a `file`-scoped change. Silo applies the
-source's configured path rewrites (translating riven's VFS path, e.g.
-`/mount/...`, to wherever Silo's library actually sees that path) and
-enqueues a scan.
+> **Requires riven-rs with the `filesystem_paths` field.** Stock riven-rs
+> emits `download.success` without the file paths, so the envelope alone can't
+> drive a scan. This plugin pairs with a riven-rs build whose
+> `MediaItemDownloadSuccess` event includes `filesystem_paths` (resolved from
+> `filesystem_entries` at emit time — a season/show carries every child
+> episode's path). Against stock riven-rs the webhook is received and ack'd but
+> reports no changes.
 
-A source's first poll never replays riven's existing library: it seeds the
-marker with every already-completed item and reports no changes, matching
-the host's "start from now" contract for a freshly bound source.
+Silo drains the buffer on the scan source's poll tick: each buffered path is
+returned as a `file`-scoped change, and Silo applies the source's configured
+path rewrites (translating riven's VFS path, e.g. `/mount/...`, to wherever
+Silo's library actually sees that path) before enqueuing a scan. The drain is
+destructive — a path is reported once — and there is no continuation marker,
+because webhook delivery (not a diff against riven's state) is what makes a
+path "new". Nothing is replayed when a source is first bound: only downloads
+that finish afterward are scanned.
 
-**Known limitation:** deletions are not detected. If riven removes a
-completed item's files, this source will not notice; run a manual or
-scheduled library scan to reconcile removals.
+### Setup
+
+1. In riven, configure the `webhooks` plugin: add the host-exposed URL for this
+   plugin's `/webhook` route to **Webhook URLs**, and (optionally) narrow the
+   **Event Filter** to `riven.media-item.download.success`.
+2. In Silo's Plugins page, install this scan source and set a poll interval
+   (the default applies if left unset) — the interval only governs how quickly
+   buffered webhooks are drained, not how riven is queried.
+
+**Security:** the `/webhook` route is declared with `public` access so riven
+(an external caller with no Silo session) can reach it. The plugin does not see
+riven's webhook signing secret, so it can't verify the `x-riven-signature`
+header — protect the route at the network / reverse-proxy layer.
+
+**Known limitations:**
+
+- **Single connection.** The webhook carries no installation identity, so
+  buffered paths are process-global. With more than one bound Riven scan
+  source, a webhook is delivered to whichever source drains first; run a
+  single scan source per Silo instance.
+- **Deletions are not detected.** riven's deletion event is not consumed; if
+  riven removes a completed item's files, this source will not notice. Run a
+  manual or scheduled library scan to reconcile removals.
+- **No restart recovery.** A webhook that arrives while the plugin is down is
+  not retried; the next completion or a manual scan reconciles it.
 
 ## Build / test
 
