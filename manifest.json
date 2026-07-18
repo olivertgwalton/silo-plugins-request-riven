@@ -1,6 +1,6 @@
 {
   "plugin_id": "silo.requests.riven",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "checksum": "__CHECKSUM__",
   "silo_api_version": "v1",
   "presentation": {
@@ -53,7 +53,7 @@
       "type": "scan_source.v1",
       "id": "riven",
       "display_name": "Riven",
-      "description": "Detect movies and episodes riven-rs has finished downloading and scan them into the library.",
+      "description": "Scan riven-rs downloads into the library as riven's autoscan webhook reports them finished.",
       "config_schema": [
         {
           "key": "connection",
@@ -65,6 +65,14 @@
           }
         }
       ]
+    }
+  ],
+  "http_routes": [
+    {
+      "id": "riven-webhook",
+      "method": "POST",
+      "path": "/webhook",
+      "access": "public"
     }
   ]
 }

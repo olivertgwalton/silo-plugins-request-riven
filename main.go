@@ -18,8 +18,13 @@ var version string
 var manifestJSON []byte
 
 func main() {
+	// One instance backs both capabilities: the http_routes.v1 webhook that
+	// receives riven's autoscan notifications and the scan_source.v1 poll that
+	// drains them into silo's library.
+	scanSource := scansource.New()
 	runtime.ServeManifest(manifestJSON, version, runtime.CapabilityServers{
 		RequestRouter: router.New(),
-		ScanSource:    scansource.New(),
+		ScanSource:    scanSource,
+		HttpRoutes:    scanSource,
 	})
 }
